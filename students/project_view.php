@@ -1,19 +1,35 @@
 <?php
 // students/project_view.php
 session_start();
-if (empty($_SESSION['user_id'])) {
+if (empty($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
     header('Location: ../auth/login.php');
     exit;
 }
-require __DIR__ . '/../config/database.php';
 
-$projectId = isset($_GET['project_id']) ? (int)$_GET['project_id'] : 0;
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/notifications.php';
+
+// Accept either ?project_id= or ?id= for backwards compatibility
+$projectId = 0;
+if (isset($_GET['project_id'])) {
+    $projectId = (int)$_GET['project_id'];
+} elseif (isset($_GET['id'])) {
+    $projectId = (int)$_GET['id'];
+}
+
 $studentId = $_SESSION['user_id'];
-// load project
+
+// 1) Load the project, ensure it belongs to this student
 $stmt = $pdo->prepare("
-    SELECT project_id, student_id, title, description, tools_used, created_at
-    FROM projects
-    WHERE project_id = ? AND student_id = ?
+  SELECT
+    p.*,
+    stu.username    AS student_name,
+    sup.username    AS supervisor_name
+  FROM projects p
+    JOIN users stu ON p.student_id    = stu.user_id
+    JOIN users sup ON p.supervisor_id = sup.user_id
+  WHERE p.project_id = ? AND p.student_id = ?
 ");
 $stmt->execute([$projectId, $studentId]);
 $project = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -21,211 +37,227 @@ if (!$project) {
     die('Access denied or project not found.');
 }
 
-// decode tools_used
-$tools = [];
-if (!empty($project['tools_used'])) {
-    $decoded = json_decode($project['tools_used'], true);
-    if (json_last_error()===JSON_ERROR_NONE && is_array($decoded)) {
-        $tools = $decoded;
-    } else {
-        foreach (explode(',', $project['tools_used']) as $t) {
-            if (trim($t)!=='') $tools[] = trim($t);
-        }
-    }
-}
-
-// load stages
+// 2) Load its stages
 $stagesStmt = $pdo->prepare("
-    SELECT stage_id, name, due_date, created_at
-    FROM stages
-    WHERE project_id = ?
-    ORDER BY due_date ASC
+  SELECT *
+  FROM stages
+  WHERE project_id = ?
+  ORDER BY due_date ASC
 ");
 $stagesStmt->execute([$projectId]);
 $stages = $stagesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// 3) Prepare attachments query
+$attachStmt = $pdo->prepare("
+  SELECT *
+  FROM attachments
+  WHERE stage_id = ?
+  ORDER BY created_at ASC
+");
+
+// 4) Unread notifications count
+$unreadCount = get_unread_notifications_count($pdo, $studentId);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>View Project – MyApp</title>
-  <link rel="stylesheet" href="../plugins/bootstrap/css/bootstrap.min.css">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>View Project – <?php echo htmlspecialchars($project['title']); ?></title>
+  <!-- AdminLTE CSS -->
   <link rel="stylesheet" href="../plugins/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="../plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
-  <style>
-  body,
-  .wrapper {
-    background: #1e1e2f;
-    color: #f0f0f0;
-  }
-
-  .main-sidebar {
-    background: #2e2e3d;
-  }
-
-  .nav-sidebar .nav-link {
-    color: #c1c1d1;
-  }
-
-  .nav-sidebar .nav-link.active {
-    background: #4e73df;
-    color: #fff;
-  }
-
-  .content-wrapper {
-    background: #f4f6f9;
-    color: #333;
-  }
-
-  .card {
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-  }
-
-  .card-header {
-    background: #4e73df;
-    color: #fff;
-  }
-
-  .badge-status-upcoming {
-    background: #1cc88a;
-  }
-
-  .badge-status-overdue {
-    background: #e74a3b;
-  }
-  </style>
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed">
   <div class="wrapper">
+
     <!-- Navbar -->
-    <nav class="main-header navbar navbar-expand navbar-light" style="background:#2e2e3d;">
+    <nav class="main-header navbar navbar-expand navbar-white navbar-light">
       <ul class="navbar-nav">
-        <li class="nav-item"><a class="nav-link text-light" data-widget="pushmenu" href="#"><i
-              class="fas fa-bars"></i></a></li>
+        <li class="nav-item">
+          <a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
+        </li>
       </ul>
       <ul class="navbar-nav ml-auto">
-        <li class="nav-item"><a class="nav-link text-light" href="../auth/logout.php"><i
-              class="fas fa-sign-out-alt"></i> Logout</a></li>
+        <!-- Notifications dropdown -->
+        <li class="nav-item dropdown">
+          <a class="nav-link" data-toggle="dropdown" href="#">
+            <i class="far fa-bell"></i>
+            <?php if ($unreadCount): ?>
+            <span class="badge badge-warning navbar-badge"><?php echo $unreadCount; ?></span>
+            <?php endif; ?>
+          </a>
+          <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
+            <span class="dropdown-header"><?php echo $unreadCount; ?> Notifications</span>
+            <div class="dropdown-divider"></div>
+            <a href="notifications.php" class="dropdown-item dropdown-footer">See All Notifications</a>
+          </div>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="../auth/logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </li>
       </ul>
     </nav>
+    <!-- /.navbar -->
+
     <!-- Sidebar -->
     <aside class="main-sidebar sidebar-dark-primary elevation-4">
-      <a href="dashboard.php" class="brand-link text-center" style="background:#4e73df;"><span
-          class="brand-text font-weight-light" style="color:#fff;">MyApp</span></a>
+      <a href="dashboard.php" class="brand-link text-center" style="background:#4e73df;">
+        <span class="brand-text font-weight-light text-white">Project Tracker</span>
+      </a>
       <div class="sidebar">
+        <!-- User panel -->
+        <div class="user-panel mt-3 pb-3 mb-3 d-flex">
+          <div class="info">
+            <a href="profile.php" class="d-block text-white"><?php echo htmlspecialchars($_SESSION['username']); ?></a>
+          </div>
+        </div>
+        <!-- Menu -->
         <nav class="mt-2">
           <ul class="nav nav-pills nav-sidebar flex-column">
-            <li class="nav-item"><a href="dashboard.php" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i>
+            <li class="nav-item">
+              <a href="dashboard.php" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i>
                 <p>Dashboard</p>
-              </a></li>
-            <li class="nav-item"><a href="project_create.php" class="nav-link"><i
-                  class="nav-icon fas fa-plus-circle"></i>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="projects.php" class="nav-link"><i class="nav-icon fas fa-project-diagram"></i>
+                <p>My Projects</p>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="create_project.php" class="nav-link"><i class="nav-icon fas fa-plus-circle"></i>
                 <p>Create Project</p>
-              </a></li>
-            <li class="nav-item"><a href="stage_upload.php?project_id=<?php echo $projectId; ?>" class="nav-link"><i
-                  class="nav-icon fas fa-upload"></i>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="upload_stage.php?project_id=<?php echo $projectId; ?>" class="nav-link">
+                <i class="nav-icon fas fa-upload"></i>
                 <p>Upload to Stage</p>
-              </a></li>
-            <li class="nav-item"><a href="profile.php" class="nav-link"><i class="nav-icon fas fa-user"></i>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="notifications.php" class="nav-link">
+                <i class="nav-icon far fa-bell"></i>
+                <p>Notifications</p>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="profile.php" class="nav-link"><i class="nav-icon fas fa-user"></i>
                 <p>Profile</p>
-              </a></li>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="../auth/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i>
+                <p>Logout</p>
+              </a>
+            </li>
           </ul>
         </nav>
       </div>
     </aside>
+
     <!-- Content Wrapper -->
     <div class="content-wrapper p-4">
-      <div class="container">
-        <!-- Project Header -->
+      <div class="container-fluid">
+        <!-- Project Details -->
         <div class="card mb-4">
-          <div class="card-header">
-            <h2 class="mb-0"><?php echo htmlspecialchars($project['title']); ?></h2>
+          <div class="card-header bg-primary">
+            <h3 class="card-title text-white"><?php echo htmlspecialchars($project['title']); ?></h3>
           </div>
           <div class="card-body">
-            <p><?php echo nl2br(htmlspecialchars($project['description'])); ?></p>
-            <?php if(count($tools)>0): ?>
-            <h6>Tools Used:</h6>
-            <?php foreach($tools as $t): ?>
-            <span class="badge badge-info mr-1"><?php echo htmlspecialchars($t); ?></span>
-            <?php endforeach;?>
-            <?php endif;?>
+            <p><strong>Description:</strong><br><?php echo nl2br(htmlspecialchars($project['description'])); ?></p>
+            <p><strong>Status:</strong>
+              <span class="badge badge-<?php echo match($project['status']) {
+              'completed'   => 'success',
+              'in_progress' => 'primary',
+              'pending'     => 'warning',
+              default       => 'danger',
+            }; ?>"><?php echo ucfirst($project['status']); ?></span>
+            </p>
+            <p><strong>Supervisor:</strong> <?php echo htmlspecialchars($project['supervisor_name']); ?></p>
+            <p><strong>Created:</strong> <?php echo date('Y-m-d H:i',strtotime($project['created_at'])); ?></p>
+            <?php if ($project['updated_at']): ?>
+            <p><strong>Updated:</strong> <?php echo date('Y-m-d H:i',strtotime($project['updated_at'])); ?></p>
+            <?php endif; ?>
           </div>
         </div>
+
         <!-- Stages -->
-        <h4 class="mb-3">Project Stages</h4>
-        <div class="row">
-          <?php if(empty($stages)): ?>
-          <div class="col-12">
-            <p class="text-muted">No stages defined.</p>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Project Stages</h3>
           </div>
-          <?php endif;?>
-          <?php foreach($stages as $stage):
-          // uploads
-          $uStmt = $pdo->prepare("SELECT file_path, uploaded_at FROM uploads WHERE stage_id=?");
-          $uStmt->execute([$stage['stage_id']]);
-          $uploads = $uStmt->fetchAll(PDO::FETCH_ASSOC);
-          // review
-          $rStmt = $pdo->prepare("SELECT comment, grade, reviewed_at FROM reviews WHERE stage_id=?");
-          $rStmt->execute([$stage['stage_id']]);
-          $review = $rStmt->fetch(PDO::FETCH_ASSOC);
-          $due = new DateTime($stage['due_date']);
-          $now = new DateTime();
-          $overdue = $due < $now;
-        ?>
-          <div class="col-md-6 mb-4">
-            <div class="card h-100">
-              <div class="card-header d-flex justify-content-between align-items-center">
-                <strong><?php echo htmlspecialchars($stage['name']); ?></strong>
-                <span class="badge <?php echo $overdue?'badge-status-overdue':'badge-status-upcoming'; ?>">
-                  <?php echo $overdue?'Overdue':'Upcoming'; ?>
-                </span>
+          <div class="card-body">
+            <div class="row">
+              <?php foreach ($stages as $stage):
+              $attachStmt->execute([$stage['stage_id']]);
+              $attachments = $attachStmt->fetchAll(PDO::FETCH_ASSOC);
+            ?>
+              <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                  <div class="card-header d-flex justify-content-between">
+                    <span><?php echo htmlspecialchars($stage['title']); ?></span>
+                    <span class="badge badge-<?php echo match($stage['status']) {
+                      'submitted' => 'info',
+                      'approved'  => 'success',
+                      'rejected'  => 'danger',
+                      default     => 'secondary',
+                    }; ?>"><?php echo ucfirst($stage['status']); ?></span>
+                  </div>
+                  <div class="card-body">
+                    <p><?php echo nl2br(htmlspecialchars($stage['description'])); ?></p>
+                    <p><strong>Due:</strong> <?php echo htmlspecialchars($stage['due_date']); ?></p>
+                    <?php if ($stage['grade'] !== null): ?>
+                    <p><strong>Grade:</strong> <?php echo number_format($stage['grade'],2); ?></p>
+                    <?php endif; ?>
+                    <?php if ($stage['feedback']): ?>
+                    <p><strong>Feedback:</strong> <?php echo nl2br(htmlspecialchars($stage['feedback'])); ?></p>
+                    <?php endif; ?>
+
+                    <!-- Attachments -->
+                    <?php if ($attachments): ?>
+                    <h6>Attachments</h6>
+                    <ul>
+                      <?php foreach ($attachments as $file): ?>
+                      <li>
+                        <a href="<?php echo htmlspecialchars($file['file_path']); ?>" target="_blank">
+                          <?php echo htmlspecialchars($file['file_name']); ?>
+                        </a>
+                      </li>
+                      <?php endforeach; ?>
+                    </ul>
+                    <?php endif; ?>
+
+                    <a href="stage_view.php?stage_id=<?php echo $stage['stage_id']; ?>" class="btn btn-sm btn-primary">
+                      <i class="fas fa-eye"></i> View Stage
+                    </a>
+                  </div>
+                </div>
               </div>
-              <div class="card-body">
-                <p><strong>Due:</strong> <?php echo $due->format('Y-m-d'); ?></p>
-                <h6>Files</h6>
-                <?php if($uploads): ?>
-                <ul class="list-group mb-3">
-                  <?php foreach($uploads as $f): ?>
-                  <li class="list-group-item">
-                    <a href="../uploads/<?php echo rawurlencode($f['file_path']); ?>"
-                      target="_blank"><?php echo basename($f['file_path']); ?></a>
-                    <small
-                      class="text-muted float-right"><?php echo (new DateTime($f['uploaded_at']))->format('Y-m-d H:i'); ?></small>
-                  </li>
-                  <?php endforeach;?>
-                </ul>
-                <?php else: ?>
-                <p class="text-muted"><em>No files uploaded.</em></p>
-                <?php endif;?>
-                <a href="stage_upload.php?project_id=<?php echo $projectId; ?>"
-                  class="btn btn-sm btn-outline-primary mb-3"><i class="fas fa-upload"></i> Upload File</a>
-                <h6>Supervisor Review</h6>
-                <?php if($review): ?>
-                <p><span class="badge badge-secondary">Grade: <?php echo htmlspecialchars($review['grade']); ?></span>
-                </p>
-                <p><?php echo nl2br(htmlspecialchars($review['comment'])); ?></p>
-                <p class="text-muted">Reviewed:
-                  <?php echo (new DateTime($review['reviewed_at']))->format('Y-m-d H:i'); ?></p>
-                <?php else: ?>
-                <p class="text-warning"><em>Pending review</em></p>
-                <?php endif;?>
+              <?php endforeach; ?>
+
+              <?php if (empty($stages)): ?>
+              <div class="col-12">
+                <p class="text-muted">No stages for this project.</p>
               </div>
+              <?php endif; ?>
             </div>
           </div>
-          <?php endforeach;?>
         </div>
-        <a href="dashboard.php" class="btn btn-secondary mt-3"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
       </div>
     </div>
+
     <!-- Footer -->
-    <footer class="main-footer text-center" style="background:#2e2e3d; color:#f8f9fc;">
-      <strong>&copy; <?php echo date('Y'); ?> MyApp</strong>
+    <footer class="main-footer text-center">
+      <strong>&copy; <?php echo date('Y'); ?> Project Tracker</strong>
     </footer>
   </div>
+
+  <!-- Scripts -->
   <script src="../plugins/jquery/jquery.min.js"></script>
   <script src="../plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="../plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>

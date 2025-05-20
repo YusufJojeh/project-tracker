@@ -1,50 +1,108 @@
 <?php
-// students/project_create.php
+// project_create.php
 session_start();
-if ( empty( $_SESSION[ 'user_id' ] ) ) {
+if ( empty( $_SESSION[ 'user_id' ] ) || $_SESSION[ 'role' ] !== 'student' ) {
     header( 'Location: ../auth/login.php' );
     exit;
 }
-require __DIR__ . '/../config/database.php';
+require_once '../config/database.php';
+require_once '../includes/functions.php';
+require_role( 'student' );
+
+$error = '';
+$success = '';
+
+// Fetch supervisors
+$stmt = $pdo->query( '
+    SELECT
+        s.supervisor_id,
+        s.full_name,
+        s.title,
+        d.name as department,
+        sp.name as specialization,
+        (SELECT COUNT(*) FROM projects WHERE supervisor_id = s.supervisor_id AND status != "archived") as current_students,
+        s.max_students
+    FROM supervisors s
+    JOIN departments d ON s.department_id = d.department_id
+    JOIN specializations sp ON s.specialization_id = sp.specialization_id
+    WHERE s.max_students > (
+        SELECT COUNT(*)
+        FROM projects
+        WHERE supervisor_id = s.supervisor_id
+        AND status != "archived"
+    )
+    ORDER BY d.name, s.full_name
+' );
+$supervisors = $stmt->fetchAll();
 
 if ( $_SERVER[ 'REQUEST_METHOD' ] === 'POST' ) {
-    $studentId   = $_SESSION[ 'user_id' ];
-    $title       = trim( $_POST[ 'title' ] );
-    $description = trim( $_POST[ 'description' ] );
-    $toolsInput  = trim( $_POST[ 'tools_used' ] );
-    $toolsUsed   = $toolsInput !== '' ? $toolsInput : null;
+    $title              = trim( $_POST[ 'title' ] ?? '' );
+    $description        = trim( $_POST[ 'description' ] ?? '' );
+    $objectives         = trim( $_POST[ 'objectives' ] ?? '' );
+    $methodology        = trim( $_POST[ 'methodology' ] ?? '' );
+    $expected_outcomes  = trim( $_POST[ 'expected_outcomes' ] ?? '' );
+    $supervisor_id      = $_POST[ 'supervisor_id' ] ?? null;
+    $start_date         = $_POST[ 'start_date' ] ?? '';
+    $end_date           = $_POST[ 'end_date' ] ?? '';
 
-    // Insert project
-    $stmt = $pdo->prepare( "
-        INSERT INTO projects (student_id, title, description, tools_used)
-        VALUES (?, ?, ?, ?)
-    " );
-    $stmt->execute( [
-        $studentId,
-        $title,
-        $description,
-        $toolsUsed,
-    ] );
-    $projectId = $pdo->lastInsertId();
+    if ( empty( $title ) ) {
+        $error = 'Project title is required';
+    } elseif ( empty( $supervisor_id ) ) {
+        $error = 'Please select a supervisor';
+    } elseif ( empty( $start_date ) || empty( $end_date ) ) {
+        $error = 'Start and end dates are required';
+    } elseif ( strtotime( $end_date ) <= strtotime( $start_date ) ) {
+        $error = 'End date must be after start date';
+    } else {
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare( '
+                INSERT INTO projects (
+                    student_id, supervisor_id, title, description,
+                    objectives, methodology, expected_outcomes,
+                    status, start_date, end_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, "proposed", ?, ?)
+            ' );
+            $stmt->execute( [
+                $_SESSION[ 'user_id' ], $supervisor_id, $title, $description,
+                $objectives, $methodology, $expected_outcomes,
+                $start_date, $end_date
+            ] );
+            $project_id = $pdo->lastInsertId();
 
-    // Add default stages
-    $defaultStages = [
-        'Idea Definition',
-        'Feasibility Study',
-        'Design',
-        'Development',
-        'Final Submission'
-    ];
-    $insStage = $pdo->prepare( "
-        INSERT INTO stages (project_id, name, due_date, created_at)
-        VALUES (?, ?, NULL, NOW())
-    " );
-    foreach ( $defaultStages as $stageName ) {
-        $insStage->execute( [ $projectId, $stageName ] );
+            $stages = [
+                [ 'Project Proposal', 'Initial project proposal and requirements', date( 'Y-m-d', strtotime( "$start_date +2 weeks" ) ) ],
+                [ 'Literature Review', 'Review of relevant research and literature', date( 'Y-m-d', strtotime( "$start_date +4 weeks" ) ) ],
+                [ 'System Design', 'Detailed system architecture and design', date( 'Y-m-d', strtotime( "$start_date +6 weeks" ) ) ],
+                [ 'Implementation', 'Core system implementation', date( 'Y-m-d', strtotime( "$start_date +10 weeks" ) ) ],
+                [ 'Testing', 'System testing and validation', date( 'Y-m-d', strtotime( "$start_date +12 weeks" ) ) ],
+                [ 'Documentation', 'Final documentation and user manual', date( 'Y-m-d', strtotime( "$end_date -2 weeks" ) ) ],
+            ];
+            $stmt = $pdo->prepare( '
+                INSERT INTO stages (project_id, title, description, due_date, status)
+                VALUES (?, ?, ?, ?, "pending")
+            ' );
+            foreach ( $stages as $s ) {
+                $stmt->execute( [ $project_id, $s[ 0 ], $s[ 1 ], $s[ 2 ] ] );
+            }
+
+            create_notification(
+                $pdo,
+                $supervisor_id,
+                'New Project Proposal',
+                'A new project has been proposed for your review',
+                'info',
+                "/supervisors/project_view.php?id=$project_id"
+            );
+
+            $pdo->commit();
+            header( "Location: project_view.php?id=$project_id" );
+            exit;
+        } catch ( Exception $e ) {
+            $pdo->rollBack();
+            $error = 'Error creating project: ' . $e->getMessage();
+        }
     }
-
-    header( 'Location: dashboard.php' );
-    exit;
 }
 ?>
 <!DOCTYPE html>
@@ -53,7 +111,7 @@ if ( $_SERVER[ 'REQUEST_METHOD' ] === 'POST' ) {
 <head>
 <meta charset = 'utf-8' />
 <meta name = 'viewport' content = 'width=device-width, initial-scale=1' />
-<title>Create Project – MyApp</title>
+<title>Create New Project – MyApp</title>
 <link rel = 'stylesheet' href = '../plugins/bootstrap/css/bootstrap.min.css' />
 <link rel = 'stylesheet' href = '../plugins/fontawesome-free/css/all.min.css' />
 <link rel = 'stylesheet' href = '../plugins/overlayScrollbars/css/OverlayScrollbars.min.css' />
@@ -63,6 +121,19 @@ body,
 .wrapper {
     background: #1e1e2f;
     color: #f0f0f0;
+}
+
+.card {
+    background: #2f2f3f;
+    border: none;
+    color: #ddd;
+    box-shadow: 0 4px 8px rgba( 0, 0, 0, 0.3 );
+}
+
+.card-header {
+    background: #3b3b4d;
+    border-bottom: 2px solid #4e73df;
+    color: #fff;
 }
 
 .main-sidebar {
@@ -79,23 +150,7 @@ body,
 }
 
 .content-wrapper {
-    background: #f4f6f9;
-    color: #333;
-}
-
-.card {
-    box-shadow: 0 4px 10px rgba( 0, 0, 0, 0.1 );
-}
-
-.card-header {
-    background: #4e73df;
-    color: #fff;
-    border-bottom: none;
-}
-
-.btn-primary {
-    background: #4e73df;
-    border-color: #4e73df;
+    padding: 1.5rem;
 }
 </style>
 </head>
@@ -117,8 +172,9 @@ class = 'fas fa-sign-out-alt'></i> Logout</a></li>
 </nav>
 <!-- Sidebar -->
 <aside class = 'main-sidebar sidebar-dark-primary elevation-4'>
-<a href = '#' class = 'brand-link text-center' style = 'background:#4e73df;'><span class = 'brand-text font-weight-light'
-style = 'color:#fff;'>MyApp</span></a>
+<a href = '#' class = 'brand-link text-center' style = 'background:#4e73df;'>
+<span class = 'brand-text font-weight-light'>MyApp</span>
+</a>
 <div class = 'sidebar'>
 <nav class = 'mt-2'>
 <ul class = 'nav nav-pills nav-sidebar flex-column'>
@@ -128,43 +184,94 @@ style = 'color:#fff;'>MyApp</span></a>
 <li class = 'nav-item'><a href = 'project_create.php' class = 'nav-link active'><i
 
 class = 'nav-icon fas fa-plus-circle'></i>
-<p>Create Project</p>
+<p>New Project</p>
 </a></li>
-<li class = 'nav-item'><a href = 'stage_upload.php' class = 'nav-link'><i class = 'nav-icon fas fa-upload'></i>
-<p>Upload Stage</p>
-</a></li>
-<li class = 'nav-item'><a href = 'profile.php' class = 'nav-link'><i class = 'nav-icon fas fa-user'></i>
-<p>Profile</p>
+<li class = 'nav-item'><a href = 'projects.php' class = 'nav-link'><i class = 'nav-icon fas fa-folder-open'></i>
+<p>My Projects</p>
 </a></li>
 </ul>
 </nav>
 </div>
 </aside>
 <!-- Content Wrapper -->
-<div class = 'content-wrapper p-4'>
-<div class = 'container'>
+<div class = 'content-wrapper'>
+<section class = 'content-header'>
+<h1>Create New Project</h1>
+<a href = 'projects.php' class = 'btn btn-secondary mb-3'><i class = 'fas fa-arrow-left'></i> Back to Projects</a>
+</section>
+<section class = 'content'>
+<?php if ( $error ): ?>
+<div class = 'alert alert-danger'><?php echo h( $error );
+?></div>
+<?php endif;
+?>
 <div class = 'card'>
-<div class = 'card-header'><i class = 'fas fa-plus-circle'></i> Create New Project</div>
+<div class = 'card-header'>
+<h3 class = 'card-title'>Project Details</h3>
+</div>
 <div class = 'card-body'>
 <form method = 'post'>
 <div class = 'form-group'>
-<label for = 'title'>Title</label>
-<input id = 'title' name = 'title' class = 'form-control' required />
+<label>Project Title <span class = 'text-danger'>*</span></label>
+<input type = 'text' name = 'title' class = 'form-control' value = "<?php echo h($_POST['title'] ?? ''); ?>"
+required>
 </div>
 <div class = 'form-group'>
-<label for = 'description'>Description</label>
-<textarea id = 'description' name = 'description' class = 'form-control' rows = '4' required></textarea>
+<label>Description</label>
+<textarea name = 'description' class = 'form-control'
+rows = '3'><?php echo h( $_POST[ 'description' ] ?? '' );
+?></textarea>
 </div>
 <div class = 'form-group'>
-<label for = 'tools_used'>Tools Used <small>( optional )</small></label>
-<input id = 'tools_used' name = 'tools_used' class = 'form-control' />
+<label>Objectives</label>
+<textarea name = 'objectives' class = 'form-control'
+rows = '3'><?php echo h( $_POST[ 'objectives' ] ?? '' );
+?></textarea>
 </div>
-<button type = 'submit' class = 'btn btn-primary'><i class = 'fas fa-check'></i> Add Project</button>
-<a href = 'dashboard.php' class = 'btn btn-secondary'><i class = 'fas fa-arrow-left'></i> Cancel</a>
+<div class = 'form-group'>
+<label>Methodology</label>
+<textarea name = 'methodology' class = 'form-control'
+rows = '3'><?php echo h( $_POST[ 'methodology' ] ?? '' );
+?></textarea>
+</div>
+<div class = 'form-group'>
+<label>Expected Outcomes</label>
+<textarea name = 'expected_outcomes' class = 'form-control'
+rows = '3'><?php echo h( $_POST[ 'expected_outcomes' ] ?? '' );
+?></textarea>
+</div>
+<div class = 'form-group'>
+<label>Supervisor <span class = 'text-danger'>*</span></label>
+<select name = 'supervisor_id' class = 'form-control' required>
+<option value = ''>Select a supervisor</option>
+<?php foreach ( $supervisors as $sup ): ?>
+<option value = "<?php echo $sup['supervisor_id']; ?>"
+<?php if ( ( $sup[ 'supervisor_id' ] ?? '' ) == ( $_POST[ 'supervisor_id' ] ?? '' ) ) echo 'selected';
+?>>
+<?php echo h( "{$sup['title']} {$sup['full_name']} ({$sup['department']} - {$sup['specialization']}) — {$sup['current_students']}/{$sup['max_students']}" );
+?>
+</option>
+<?php endforeach;
+?>
+</select>
+</div>
+<div class = 'form-row'>
+<div class = 'form-group col-md-6'>
+<label>Start Date <span class = 'text-danger'>*</span></label>
+<input type = 'date' name = 'start_date' class = 'form-control'
+value = "<?php echo h($_POST['start_date'] ?? ''); ?>" required>
+</div>
+<div class = 'form-group col-md-6'>
+<label>End Date <span class = 'text-danger'>*</span></label>
+<input type = 'date' name = 'end_date' class = 'form-control'
+value = "<?php echo h($_POST['end_date'] ?? ''); ?>" required>
+</div>
+</div>
+<button type = 'submit' class = 'btn btn-primary'><i class = 'fas fa-save'></i> Create Project</button>
 </form>
 </div>
 </div>
-</div>
+</section>
 </div>
 <!-- Footer -->
 <footer class = 'main-footer text-center' style = 'background:#2e2e3d; color:#f8f9fc;'>
