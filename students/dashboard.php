@@ -229,7 +229,7 @@ $ago = time_elapsed_string( $note[ 'created_at' ] );
                 <p>My Projects</p>
               </div>
               <div class='icon'><i class='fas fa-project-diagram'></i></div>
-              <a href='create_project.php' class='small-box-footer'>
+              <a href='project_create.php' class='small-box-footer'>
                 New Project <i class='fas fa-plus-circle'></i>
               </a>
             </div>

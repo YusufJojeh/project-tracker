@@ -1,111 +1,70 @@
 <?php
 // includes/notifications.php
 
-// --- Create a new notification ---
+// require_once __DIR__ . '/functions.php';
 
-function create_notification( $pdo, $user_id, $title, $message ) {
-    $stmt = $pdo->prepare( '
+// -----------------------------------------------------------------------------
+// 1 ) Create a new notification
+// -----------------------------------------------------------------------------
+
+function create_notification( PDO $pdo, int $user_id, string $title, string $message ): bool {
+    $stmt = $pdo->prepare( "
         INSERT INTO notifications (user_id, title, message)
         VALUES (?, ?, ?)
-    ' );
+    " );
     return $stmt->execute( [ $user_id, $title, $message ] );
 }
 
-// --- Count unread notifications ---
+// -----------------------------------------------------------------------------
+// 2 ) Count unread notifications
+// -----------------------------------------------------------------------------
 
-function get_unread_notifications_count( $pdo, $user_id ) {
-    $stmt = $pdo->prepare( '
+function get_unread_notifications_count( PDO $pdo, int $userId ): int {
+    $stmt = $pdo->prepare( "
         SELECT COUNT(*)
         FROM notifications
         WHERE user_id = ? AND is_read = 0
-    ' );
-    $stmt->execute( [ $user_id ] );
-    return $stmt->fetchColumn();
+    " );
+    $stmt->execute( [ $userId ] );
+    return ( int )$stmt->fetchColumn();
 }
 
-// --- Get recent notifications ( default 5 ) ---
+// -----------------------------------------------------------------------------
+// 3 ) Fetch recent notifications ( default 5 )
+// -----------------------------------------------------------------------------
 
-function get_recent_notifications( $pdo, $user_id, $limit = 5 ) {
-    $stmt = $pdo->prepare( '
-        SELECT *
+function get_recent_notifications( PDO $pdo, int $userId, int $limit = 5 ): array {
+    $stmt = $pdo->prepare( "
+        SELECT notification_id, title, message, is_read, created_at
         FROM notifications
         WHERE user_id = ?
         ORDER BY created_at DESC
         LIMIT ?
-    ' );
-    $stmt->bindValue( 1, $user_id, PDO::PARAM_INT );
+    " );
+    $stmt->bindValue( 1, $userId, PDO::PARAM_INT );
     $stmt->bindValue( 2, $limit, PDO::PARAM_INT );
     $stmt->execute();
     return $stmt->fetchAll( PDO::FETCH_ASSOC );
 }
 
-// --- Mark notification as read ---
+// -----------------------------------------------------------------------------
+// 4 ) Mark one or all notifications as read
+// -----------------------------------------------------------------------------
 
-function mark_notification_as_read( $pdo, $notification_id ) {
-    $stmt = $pdo->prepare( '
+function mark_notification_as_read( PDO $pdo, int $notificationId ): bool {
+    $stmt = $pdo->prepare( "
         UPDATE notifications
         SET is_read = 1
         WHERE notification_id = ?
-    ' );
-    return $stmt->execute( [ $notification_id ] );
+    " );
+    return $stmt->execute( [ $notificationId ] );
 }
 
-// --- Mark all as read ---
-
-function mark_all_notifications_as_read( $pdo, $user_id ) {
-    $stmt = $pdo->prepare( '
+function mark_all_notifications_as_read( PDO $pdo, int $userId ): bool {
+    $stmt = $pdo->prepare( "
         UPDATE notifications
         SET is_read = 1
-        WHERE user_id = ? AND is_read = 0
-    ' );
-    return $stmt->execute( [ $user_id ] );
+        WHERE user_id = ?
+    " );
+    return $stmt->execute( [ $userId ] );
 }
-
-// --- Time elapsed helper ---
-
-function time_elapsed_string( $datetime ) {
-    $now = new DateTime;
-    $ago = new DateTime( $datetime );
-    $diff = $now->diff( $ago );
-
-    if ( $diff->d > 7 ) {
-        return date( 'M j, Y', strtotime( $datetime ) );
-    }
-    if ( $diff->d > 0 ) {
-        return $diff->d . 'd ago';
-    }
-    if ( $diff->h > 0 ) {
-        return $diff->h . 'h ago';
-    }
-    if ( $diff->i > 0 ) {
-        return $diff->i . 'm ago';
-    }
-    return 'just now';
-}
-
-// project-tracker/includes/notifications.php
-
-/**
-* Mark a single notification as read.
-*/
-
-/**
-* Given a notification type, return an AdminLTE badge class.
-*/
-
-function get_notification_badge_class( string $type ): string {
-    switch ( $type ) {
-        case 'success':
-        return 'badge badge-success';
-        case 'warning':
-        return 'badge badge-warning';
-        case 'danger':
-        return 'badge badge-danger';
-        default:
-        return 'badge badge-info';
-    }
-}
-
-/**
-* Turn a timestamp into a human-friendly 'time ago'.
-*/

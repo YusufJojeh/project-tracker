@@ -117,6 +117,23 @@ if ( isset( $_GET[ 'edit' ] ) ) {
 
 <body class = 'hold-transition sidebar-mini'>
 <div class = 'wrapper'>
+<!-- Navbar -->
+<nav class = 'main-header navbar navbar-expand navbar-white navbar-light'>
+<!-- Left navbar links -->
+<ul class = 'navbar-nav'>
+<li class = 'nav-item'>
+<a class = 'nav-link' data-widget = 'pushmenu' href = '#' role = 'button'><i class = 'fas fa-bars'></i></a>
+</li>
+</ul>
+<!-- Right navbar links -->
+<ul class = 'navbar-nav ml-auto'>
+<li class = 'nav-item'>
+<a class = 'nav-link' href = '../auth/logout.php'>
+<i class = 'fas fa-sign-out-alt'></i> Logout
+</a>
+</li>
+</ul>
+</nav>
 <!-- Sidebar ( copy from your layout if needed ) -->
 <aside class = 'main-sidebar sidebar-dark-primary elevation-4'>
 <a href = 'dashboard.php' class = 'brand-link'>
@@ -247,7 +264,12 @@ onclick = "return confirm('Are you sure you want to delete this department?');">
 </div>
 </section>
 </div>
+<?php
+// Render AdminLTE footer ( includes closing </body></html> )
+include  '../includes/footer.php';
+?>
 </div>
+
 <!-- JS -->
 <script src = 'https://code.jquery.com/jquery-3.6.0.min.js'></script>
 <script src = 'https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js'></script>

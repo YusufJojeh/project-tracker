@@ -170,6 +170,7 @@ $unreadCount = get_unread_notifications_count( $pdo, $supervisorId );
       </div>
     </aside>
 
+
     <!-- Content Wrapper -->
     <div class='content-wrapper p-4'>
       <div class='container-fluid'>

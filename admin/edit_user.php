@@ -99,6 +99,22 @@ if ( $_SERVER[ 'REQUEST_METHOD' ] === 'POST' ) {
 
 <body class="hold-transition sidebar-mini">
   <div class="wrapper">
+    <nav class='main-header navbar navbar-expand navbar-white navbar-light'>
+      <!-- Left navbar links -->
+      <ul class='navbar-nav'>
+        <li class='nav-item'>
+          <a class='nav-link' data-widget='pushmenu' href='#' role='button'><i class='fas fa-bars'></i></a>
+        </li>
+      </ul>
+      <!-- Right navbar links -->
+      <ul class='navbar-nav ml-auto'>
+        <li class='nav-item'>
+          <a class='nav-link' href='../auth/logout.php'>
+            <i class='fas fa-sign-out-alt'></i> Logout
+          </a>
+        </li>
+      </ul>
+    </nav>
     <!-- Sidebar (copy from your layout if needed) -->
     <aside class="main-sidebar sidebar-dark-primary elevation-4">
       <a href="dashboard.php" class="brand-link">
@@ -172,30 +188,30 @@ if ( $_SERVER[ 'REQUEST_METHOD' ] === 'POST' ) {
                     <option value="supervisor" <?php if ($role === 'supervisor') echo 'selected'; ?>>Supervisor</option>
                     <option value="student" <?php if ($role === 'student') echo 'selected';
     ?>>Student</option>
-    </select>
+                  </select>
+                </div>
+                <div class='form-group'>
+                  <label for='password'>Password ( leave blank to keep current )</label>
+                  <input type='password' class='form-control' id='password' name='password' autocomplete='new-password'>
+                </div>
+                <div class='form-group'>
+                  <label for='password_confirm'>Confirm Password</label>
+                  <input type='password' class='form-control' id='password_confirm' name='password_confirm'
+                    autocomplete='new-password'>
+                </div>
+                <button type='submit' class='btn btn-primary'><i class='fas fa-save'></i> Update User</button>
+                <a href='users.php' class='btn btn-secondary'>Cancel</a>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
-    <div class = 'form-group'>
-    <label for = 'password'>Password ( leave blank to keep current )</label>
-    <input type = 'password' class = 'form-control' id = 'password' name = 'password' autocomplete = 'new-password'>
-    </div>
-    <div class = 'form-group'>
-    <label for = 'password_confirm'>Confirm Password</label>
-    <input type = 'password' class = 'form-control' id = 'password_confirm' name = 'password_confirm'
-    autocomplete = 'new-password'>
-    </div>
-    <button type = 'submit' class = 'btn btn-primary'><i class = 'fas fa-save'></i> Update User</button>
-    <a href = 'users.php' class = 'btn btn-secondary'>Cancel</a>
-    </form>
-    </div>
-    </div>
-    </div>
-    </section>
-    </div>
-    </div>
-    <!-- JS -->
-    <script src = 'https://code.jquery.com/jquery-3.6.0.min.js'></script>
-    <script src = 'https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js'></script>
-    <script src = 'https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js'></script>
-    </body>
+  </div>
+  <!-- JS -->
+  <script src='https://code.jquery.com/jquery-3.6.0.min.js'></script>
+  <script src='https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js'></script>
+  <script src='https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js'></script>
+</body>
 
-    </html>
+</html>
