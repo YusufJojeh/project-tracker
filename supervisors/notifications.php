@@ -27,7 +27,7 @@ if (!empty($_GET['action'])) {
 
 // Fetch only unread notifications
 $stmt = $pdo->prepare("
-    SELECT notification_id, title, message, created_at
+    SELECT notification_id, message, created_at
     FROM notifications
     WHERE user_id = ? AND is_read = 0
     ORDER BY created_at DESC
@@ -153,7 +153,6 @@ $unreadCount   = count($notifications);
                     <i class="far fa-bell fa-lg text-info"></i>
                   </div>
                   <div class="flex-fill">
-                    <h6 class="mb-1"><?php echo htmlspecialchars($n['title'], ENT_QUOTES); ?></h6>
                     <p class="mb-1"><?php echo htmlspecialchars($n['message'], ENT_QUOTES); ?></p>
                     <small class="text-muted"><?php echo date('Y-m-d H:i', strtotime($n['created_at'])); ?></small>
                   </div>

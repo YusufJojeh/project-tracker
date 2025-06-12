@@ -1,5 +1,5 @@
 <?php
-// students/project_create.php
+// students/dashboard.php
 session_start();
 if ( empty( $_SESSION[ 'user_id' ] ) || $_SESSION[ 'role' ] !== 'student' ) {
     header( 'Location: ../auth/login.php' );
@@ -9,87 +9,47 @@ if ( empty( $_SESSION[ 'user_id' ] ) || $_SESSION[ 'role' ] !== 'student' ) {
 require_once '../config/database.php';
 require_once '../includes/functions.php';
 require_once '../includes/notifications.php';
-require_role( 'student' );
 
-// Fetch supervisors
+// Fetch projects
 $stmt = $pdo->prepare( "
-    SELECT user_id, username
-    FROM users
-    WHERE role = 'supervisor'
-    ORDER BY username
+    SELECT
+        p.*,
+        u.username AS supervisor_name,
+        (SELECT COUNT(*) FROM stages WHERE project_id = p.project_id) AS total_stages,
+        (SELECT COUNT(*) FROM stages WHERE project_id = p.project_id AND status = 'approved') AS completed_stages
+    FROM projects p
+    JOIN users u ON p.supervisor_id = u.user_id
+    WHERE p.student_id = ?
+    ORDER BY p.updated_at DESC
 " );
-$stmt->execute();
-$supervisors = $stmt->fetchAll( PDO::FETCH_ASSOC );
+$stmt->execute( [ $_SESSION[ 'user_id' ] ] );
+$projects = $stmt->fetchAll( PDO::FETCH_ASSOC );
 
-// Fetch notifications for navbar
-$unreadCount   = get_unread_notifications_count( $pdo, $_SESSION[ 'user_id' ] );
+// Fetch notifications
 $notifications = get_recent_notifications( $pdo, $_SESSION[ 'user_id' ], 5 );
-
-$error = '';
-if ( $_SERVER[ 'REQUEST_METHOD' ] === 'POST' ) {
-    $title         = trim( $_POST[ 'title' ] ?? '' );
-    $supervisor_id = $_POST[ 'supervisor_id' ] ?? '';
-
-    if ( $title === '' ) {
-        $error = 'Project title is required';
-    } elseif ( $supervisor_id === '' ) {
-        $error = 'Please select a supervisor';
-    } else {
-        try {
-            $pdo->beginTransaction();
-            $insert = $pdo->prepare( "
-                INSERT INTO projects
-                  (student_id, supervisor_id, title, status, created_at, updated_at)
-                VALUES
-                  (?, ?, ?, 'pending', NOW(), NOW())
-            " );
-            $insert->execute( [
-                $_SESSION[ 'user_id' ],
-                $supervisor_id,
-                $title
-            ] );
-            $project_id = $pdo->lastInsertId();
-
-            // Notify supervisor
-            create_notification(
-                $pdo,
-                ( int )$supervisor_id,
-                'New Project Proposal',
-                "Student {$_SESSION['username']} proposed {$title}"
-            );
-
-            $pdo->commit();
-            header( "Location: project_view.php?id={$project_id}" );
-            exit;
-        } catch ( Exception $e ) {
-            $pdo->rollBack();
-            $error = 'Error creating project: ' . $e->getMessage();
-        }
-    }
-}
+$unreadCount   = get_unread_notifications_count( $pdo, $_SESSION[ 'user_id' ] );
 ?>
 <!DOCTYPE html>
 <html lang = 'en'>
 
 <head>
-<meta charset = 'utf-8' />
-<meta name = 'viewport' content = 'width=device-width, initial-scale=1' />
-<title>Create New Project &mdash;
-Project Tracker</title>
-<!-- Google Font -->
+<meta charset = 'utf-8'>
+<meta name = 'viewport' content = 'width=device-width, initial-scale=1'>
+<title>Student Dashboard | Project Tracker</title>
+
+<!-- Google Font: Source Sans Pro -->
 <link rel = 'stylesheet'
-href = 'https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback' />
+href = 'https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback'>
 <!-- Font Awesome -->
-<link rel = 'stylesheet' href = '../plugins/fontawesome-free/css/all.min.css' />
+<link rel = 'stylesheet' href = '../plugins/fontawesome-free/css/all.min.css'>
 <!-- overlayScrollbars -->
-<link rel = 'stylesheet' href = '../plugins/overlayScrollbars/css/OverlayScrollbars.min.css' />
-<!-- AdminLTE -->
-<link rel = 'stylesheet' href = '../dist/css/adminlte.min.css' />
+<link rel = 'stylesheet' href = '../plugins/overlayScrollbars/css/OverlayScrollbars.min.css'>
+<!-- Theme style -->
+<link rel = 'stylesheet' href = '../dist/css/adminlte.min.css'>
 </head>
 
 <body class = 'hold-transition sidebar-mini layout-fixed'>
 <div class = 'wrapper'>
-
 <!-- Navbar -->
 <nav class = 'main-header navbar navbar-expand navbar-white navbar-light'>
 <!-- Left navbar: toggle sidebar -->
@@ -247,84 +207,11 @@ style = 'opacity: .8'>
 <!-- /.sidebar -->
 </aside>
 
-<!-- Content Wrapper -->
+<!-- Content Wrapper. Contains page content -->
 <div class = 'content-wrapper'>
-
 <!-- Page header -->
 <section class = 'content-header'>
 <div class = 'container-fluid'>
-<div class = 'row mb-2'>
-<div class = 'col-sm-6'>
-<h1>Create New Project</h1>
-</div>
-<div class = 'col-sm-6 text-right'>
-<a href = 'projects.php' class = 'btn btn-secondary'>
-<i class = 'fas fa-arrow-left'></i> Back to Projects
-</a>
-</div>
-</div>
+<h1>Student Dashboard</h1>
 </div>
 </section>
-
-<!-- Main content -->
-<section class = 'content'>
-<?php if ( $error ): ?>
-<div class = 'alert alert-danger'><?php echo h( $error );
-?></div>
-<?php endif;
-?>
-
-<div class = 'card card-primary'>
-<div class = 'card-header'>
-<h3 class = 'card-title'>Project Details</h3>
-</div>
-<form method = 'post' action = ''>
-<div class = 'card-body'>
-<div class = 'form-group'>
-<label for = 'title'>Project Title <span class = 'text-danger'>*</span></label>
-<input type = 'text' id = 'title' name = 'title' class = 'form-control' placeholder = 'Enter project title'
-value = "<?php echo h($_POST['title'] ?? ''); ?>" required>
-</div>
-<div class = 'form-group'>
-<label for = 'supervisor_id'>Supervisor <span class = 'text-danger'>*</span></label>
-<select id = 'supervisor_id' name = 'supervisor_id' class = 'form-control' required>
-<option value = ''>Select Supervisor</option>
-<?php foreach ( $supervisors as $sup ): ?>
-<option value = "<?php echo $sup['user_id']; ?>" <?php echo ( ( $_POST[ 'supervisor_id' ] ?? '' ) == $sup[ 'user_id' ] ) ? 'selected' : '';
-?>>
-<?php echo h( $sup[ 'username' ] );
-?>
-</option>
-<?php endforeach;
-?>
-</select>
-</div>
-</div>
-<div class = 'card-footer'>
-<button type = 'submit' class = 'btn btn-primary'>
-<i class = 'fas fa-save'></i> Create Project
-</button>
-<a href = 'projects.php' class = 'btn btn-default'>Cancel</a>
-</div>
-</form>
-</div>
-</section>
-
-</div>
-<!-- /.content-wrapper -->
-
-<!-- Footer -->
-<?php include __DIR__ . '/../includes/footer.php';
-?>
-
-</div>
-<!-- ./wrapper -->
-
-<!-- REQUIRED SCRIPTS -->
-<script src = '../plugins/jquery/jquery.min.js'></script>
-<script src = '../plugins/bootstrap/js/bootstrap.bundle.min.js'></script>
-<script src = '../plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js'></script>
-<script src = '../dist/js/adminlte.min.js'></script>
-</body>
-
-</html>

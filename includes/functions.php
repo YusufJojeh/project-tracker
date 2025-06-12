@@ -98,34 +98,46 @@ if ( !function_exists( 'handle_file_upload' ) ) {
     }
 }
 
-function has_permission( PDO $pdo, string $permission_name ): bool {
-    if ( session_status() === PHP_SESSION_NONE ) {
-        session_start();
+function has_permission( $pdo, $permission ) {
+    // Check if role_id exists in the session
+    if ( !isset( $_SESSION[ 'role_id' ] ) ) {
+        die( 'Permission error: role_id not set in the session.' );
     }
-    $role = $_SESSION[ 'role' ] ?? '';
-    if ( $role === '' ) {
-        return false;
-    }
-    $stmt = $pdo->prepare( "
-      SELECT 1
+
+    // Get the current user's role_id
+    $role_id = $_SESSION['role_id']; 
+
+    // Prepare and execute the query to check if the role has the required permission
+    $stmt = $pdo->prepare("
+        SELECT 1
         FROM role_permissions rp
-        JOIN permissions p
-          ON rp.permission_id = p.permission_id
-       WHERE rp.role = ?
-         AND p.name = ?
-       LIMIT 1
-  " );
-    $stmt->execute( [ $role, $permission_name ] );
-    return ( bool )$stmt->fetchColumn();
+        JOIN permissions p ON rp.permission_id = p.id
+        WHERE rp.role_id = ? AND p.name = ?
+    ");
+    $stmt->execute([$role_id, $permission]);
+
+    return $stmt->fetchColumn() !== false;
 }
 
 /**
 * Denies access ( 403 ) unless the current user has the named permission.
 */
 
-function require_permission( PDO $pdo, string $permission_name ): void {
-    if ( ! has_permission( $pdo, $permission_name ) ) {
-        http_response_code( 403 );
-        exit( 'Forbidden' );
+function require_permission($pdo, $permission_name) {
+    // Get the role from the session (not role_id)
+    if (!isset($_SESSION['role'])) {
+        die('Permission error: role not set in session.');
+    }
+
+    // Now use $_SESSION['role'] to check the permissions for that role
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM permissions p
+                           JOIN role_permissions rp ON rp.permission_id = p.id
+                           JOIN roles r ON rp.role_id = r.id
+                           WHERE r.name = ? AND p.name = ?');
+    $stmt->execute([$_SESSION['role'], $permission_name]);
+    $permission_count = $stmt->fetchColumn();
+
+    if ($permission_count == 0) {
+        die('Permission error: You do not have the required permission.');
     }
 }

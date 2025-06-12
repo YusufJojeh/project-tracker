@@ -1,6 +1,8 @@
 <?php
 session_start();
-if (empty($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
+
+// Check if the user is logged in and is an admin
+if (empty($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     header('Location: ../auth/login.php');
     exit;
 }
@@ -9,7 +11,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/notifications.php';
 
-// Accept either ?project_id= or ?id= for backwards compatibility
+// Accept either ?project_id = or ?id = for backwards compatibility
 $projectId = 0;
 if (isset($_GET['project_id'])) {
     $projectId = (int)$_GET['project_id'];
@@ -17,23 +19,24 @@ if (isset($_GET['project_id'])) {
     $projectId = (int)$_GET['id'];
 }
 
-$studentId = $_SESSION['user_id'];
+// Admin's user ID (admin will have access to all projects)
+$adminId = $_SESSION['user_id']; // You can replace this with a specific admin identifier if needed
 
-// 1) Load the project, ensure it belongs to this student
+// 1) Load the project, ensuring the project exists
 $stmt = $pdo->prepare("
   SELECT
     p.*,
-    stu.username    AS student_name,
-    sup.username    AS supervisor_name
+    stu.username AS student_name,
+    sup.username AS supervisor_name
   FROM projects p
-    JOIN users stu ON p.student_id    = stu.user_id
-    JOIN users sup ON p.supervisor_id = sup.user_id
-  WHERE p.project_id = ? AND p.student_id = ?
+  JOIN users stu ON p.student_id = stu.user_id
+  JOIN users sup ON p.supervisor_id = sup.user_id
+  WHERE p.project_id = ?
 ");
-$stmt->execute([$projectId, $studentId]);
+$stmt->execute([$projectId]);
 $project = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$project) {
-    die('Access denied or project not found.');
+    die('Project not found.');
 }
 
 // 2) Load its stages
@@ -46,20 +49,36 @@ $stagesStmt = $pdo->prepare("
 $stagesStmt->execute([$projectId]);
 $stages = $stagesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// 3) Prepare attachments query
-$attachStmt = $pdo->prepare("
-  SELECT *
-  FROM attachments
-  WHERE stage_id = ?
-  ORDER BY created_at ASC
-");
+// 3) Prepare attachments query (check if attachments table exists)
+$attachments = [];
+try {
+    // Check if the attachments table exists
+    $stmt = $pdo->query("SHOW TABLES LIKE 'attachments'");
+    if ($stmt->rowCount() > 0) {
+        // Attachments table exists, so fetch the attachments
+        $attachStmt = $pdo->prepare("
+          SELECT *
+          FROM attachments
+          WHERE stage_id = ?
+          ORDER BY created_at ASC
+        ");
+        foreach ($stages as $stage) {
+            $attachStmt->execute([$stage['stage_id']]);
+            $attachments[$stage['stage_id']] = $attachStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    }
+} catch (PDOException $e) {
+    // If an error occurs, the attachments table might be missing or there's another issue
+    error_log("Error fetching attachments: " . $e->getMessage());
+    $attachments = [];  // Ensure it remains empty if an error occurs
+}
 
-// 4) Unread notifications count
-$unreadCount = get_unread_notifications_count($pdo, $studentId);
+// 4) Unread notifications count for admin
+$unreadCount = get_unread_notifications_count($pdo, $adminId);
 ?>
 
-<!-- Include Header -->
-<?php include('../includes/student_header.php'); ?>
+<!-- Include Header for Admin -->
+<?php include('../includes/admin_header.php'); ?>
 
 <!-- Content Wrapper -->
 <div class="content-wrapper p-4">
@@ -79,6 +98,7 @@ $unreadCount = get_unread_notifications_count($pdo, $studentId);
                         default       => 'danger',
                     }; ?>"><?php echo ucfirst($project['status']); ?></span>
         </p>
+        <p><strong>Student:</strong> <?php echo htmlspecialchars($project['student_name']); ?></p>
         <p><strong>Supervisor:</strong> <?php echo htmlspecialchars($project['supervisor_name']); ?></p>
         <p><strong>Created:</strong> <?php echo date('Y-m-d H:i', strtotime($project['created_at'])); ?></p>
         <?php if ($project['updated_at']): ?>
@@ -95,8 +115,8 @@ $unreadCount = get_unread_notifications_count($pdo, $studentId);
       <div class="card-body">
         <div class="row">
           <?php foreach ($stages as $stage):
-                        $attachStmt->execute([$stage['stage_id']]);
-                        $attachments = $attachStmt->fetchAll(PDO::FETCH_ASSOC);
+                        // Check for attachments in the existing table
+                        $stageAttachments = isset($attachments[$stage['stage_id']]) ? $attachments[$stage['stage_id']] : [];
                     ?>
           <div class="col-md-6 mb-4">
             <div class="card h-100">
@@ -112,18 +132,20 @@ $unreadCount = get_unread_notifications_count($pdo, $studentId);
               <div class="card-body">
                 <p><?php echo nl2br(htmlspecialchars($stage['description'])); ?></p>
                 <p><strong>Due:</strong> <?php echo htmlspecialchars($stage['due_date']); ?></p>
-                <?php if ($stage['grade'] !== null): ?>
+
+                <!-- Grade and Feedback -->
+                <?php if (isset($stage['grade']) && $stage['grade'] !== null): ?>
                 <p><strong>Grade:</strong> <?php echo number_format($stage['grade'], 2); ?></p>
                 <?php endif; ?>
-                <?php if ($stage['feedback']): ?>
+                <?php if (isset($stage['feedback']) && $stage['feedback'] !== ''): ?>
                 <p><strong>Feedback:</strong> <?php echo nl2br(htmlspecialchars($stage['feedback'])); ?></p>
                 <?php endif; ?>
 
                 <!-- Attachments -->
-                <?php if ($attachments): ?>
+                <?php if ($stageAttachments): ?>
                 <h6>Attachments</h6>
                 <ul>
-                  <?php foreach ($attachments as $file): ?>
+                  <?php foreach ($stageAttachments as $file): ?>
                   <li>
                     <a href="<?php echo htmlspecialchars($file['file_path']); ?>" target="_blank">
                       <?php echo htmlspecialchars($file['file_name']); ?>
@@ -153,7 +175,7 @@ $unreadCount = get_unread_notifications_count($pdo, $studentId);
 </div>
 
 <!-- Footer -->
-<?php include('../includes/student_footer.php'); ?>
+<?php include('../includes/admin_footer.php'); ?>
 
 <!-- Scripts -->
 <script src="../plugins/jquery/jquery.min.js"></script>

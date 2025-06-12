@@ -1,9 +1,9 @@
--- Drop and recreate database
+-- Create database and use it
 DROP DATABASE IF EXISTS project_tracker;
 CREATE DATABASE project_tracker;
 USE project_tracker;
 
--- Users table
+-- Users Table Creation
 CREATE TABLE users (
     user_id INT PRIMARY KEY AUTO_INCREMENT,
     username VARCHAR(50) UNIQUE NOT NULL,
@@ -14,13 +14,16 @@ CREATE TABLE users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-INSERT INTO users (username, email, password, role)
-VALUES
-('admin', 'admin@example.com',  '$2y$10$abcdefghijklmnopqrstuvwxyzabcdefghi', 'admin'),         -- fake hashed pw
-('supervisor1', 'super1@example.com', '$2y$10$abcdefghijklmnopqrstuvwxyzabcde2', 'supervisor'),
-('student1', 'student1@example.com',  '$2y$10$abcdefghijklmnopqrstuvwxyzabcde3', 'student');
+-- Users Table Seeding
+INSERT INTO users (username, email, password, role) VALUES
+('admin1', 'admin1@example.com', 'password_hash_1', 'admin'),
+('supervisor1', 'supervisor1@example.com', 'password_hash_2', 'supervisor'),
+('student1', 'student1@example.com', 'password_hash_3', 'student'),
+('admin2', 'admin2@example.com', 'password_hash_4', 'admin'),
+('supervisor2', 'supervisor2@example.com', 'password_hash_5', 'supervisor'),
+('student2', 'student2@example.com', 'password_hash_6', 'student');
 
--- Departments table
+-- Departments Table Creation
 CREATE TABLE departments (
     department_id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(100) NOT NULL,
@@ -28,11 +31,15 @@ CREATE TABLE departments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Departments Table Seeding
 INSERT INTO departments (name, description) VALUES
-('Computer Science', 'CS Department'),
-('Electrical Engineering', 'EE Department');
+('Department 1', 'Software Engineering and Systems Development'),
+('Department 2', 'Project Management and Analysis'),
+('Department 3', 'Data Science and Machine Learning'),
+('Department 4', 'Human-Computer Interaction'),
+('Department 5', 'Cybersecurity and Information Assurance');
 
--- Specializations table
+-- Specializations Table Creation
 CREATE TABLE specializations (
     specialization_id INT PRIMARY KEY AUTO_INCREMENT,
     department_id INT,
@@ -42,11 +49,15 @@ CREATE TABLE specializations (
     FOREIGN KEY (department_id) REFERENCES departments(department_id)
 );
 
+-- Specializations Table Seeding
 INSERT INTO specializations (department_id, name, description) VALUES
-(1, 'Software Engineering', 'SE Spec.'),
-(2, 'Power Systems', 'Power Spec.');
+(1, 'Software Architecture', 'Design and structure of software systems'),
+(2, 'Project Management', 'Planning, execution, and control of projects'),
+(3, 'Machine Learning', 'Development of algorithms and models'),
+(4, 'User Experience Design', 'Improvement of interaction between users and systems'),
+(5, 'Network Security', 'Protection of systems from cyber threats');
 
--- Projects table
+-- Projects Table Creation
 CREATE TABLE projects (
     project_id INT PRIMARY KEY AUTO_INCREMENT,
     title VARCHAR(255) NOT NULL,
@@ -60,12 +71,14 @@ CREATE TABLE projects (
     FOREIGN KEY (supervisor_id) REFERENCES users(user_id)
 );
 
-INSERT INTO projects (title, description, student_id, supervisor_id, status)
-VALUES
-('Library Management System', 'A digital library platform.', 3, 2, 'in_progress'),
-('Smart Grid Project', 'Electric grid optimization.', 3, 2, 'pending');
+-- Projects Table Seeding
+INSERT INTO projects (title, description, student_id, supervisor_id, status) VALUES
+('Project 1', 'This is a software development project focusing on web development.', 6, 5, 'in_progress'),
+('Project 2', 'A data science project analyzing user data for insights.', 5, 4, 'pending'),
+('Project 3', 'A machine learning model for predictive analytics.', 4, 3, 'in_progress'),
+('Project 4', 'Designing a secure networking system for a company.', 6, 5, 'pending');
 
--- Project stages table
+-- Stages Table Creation
 CREATE TABLE stages (
     stage_id INT PRIMARY KEY AUTO_INCREMENT,
     project_id INT,
@@ -80,50 +93,21 @@ CREATE TABLE stages (
     FOREIGN KEY (project_id) REFERENCES projects(project_id)
 );
 
-INSERT INTO stages (project_id, title, description, due_date, status)
-VALUES
-(1, 'Requirements Analysis', 'Gather requirements', '2024-12-01', 'submitted'),
-(1, 'Design Phase', 'System design', '2025-01-10', 'pending');
+-- Stages Table Seeding
+INSERT INTO stages (project_id, title, description, due_date, status, grade, feedback) VALUES
+(1, 'Stage 1: Requirement Gathering', 'Gather and document software requirements.', '2025-06-15', 'completed', 85.00, 'Well documented requirements.'),
+(1, 'Stage 2: Design', 'Create design architecture for the project.', '2025-06-20', 'in_progress', NULL, NULL),
+(2, 'Stage 1: Data Collection', 'Collect relevant data for analysis.', '2025-06-18', 'completed', 90.00, 'Good data quality.'),
+(3, 'Stage 1: Model Training', 'Train the initial machine learning model with available data.', '2025-06-25', 'pending', NULL, NULL);
 
--- Attachments table
-CREATE TABLE attachments (
-    attachment_id INT PRIMARY KEY AUTO_INCREMENT,
-    stage_id INT,
-    file_name VARCHAR(255) NOT NULL,
-    file_path VARCHAR(255) NOT NULL,
-    uploaded_by INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (stage_id) REFERENCES stages(stage_id),
-    FOREIGN KEY (uploaded_by) REFERENCES users(user_id)
-);
-
-INSERT INTO attachments (stage_id, file_name, file_path, uploaded_by)
-VALUES
-(1, 'requirements.pdf', '/uploads/requirements.pdf', 3);
-
--- Notifications table
-CREATE TABLE notifications (
-    notification_id INT PRIMARY KEY AUTO_INCREMENT,
-    user_id INT,
-    title VARCHAR(255) NOT NULL,
-    message TEXT,
-    is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id)
-);
-
-INSERT INTO notifications (user_id, title, message, is_read)
-VALUES
-(3, 'Stage 1 Graded', 'You received a grade on stage 1.', 0),
-(2, 'New Project Assigned', 'You have a new student project to supervise.', 0);
-
--- Permissions table
+-- Permissions Table Creation
 CREATE TABLE permissions (
     permission_id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(50) UNIQUE NOT NULL,
     description TEXT
 );
 
+-- Permissions Table Seeding
 INSERT INTO permissions (name, description) VALUES
 ('manage_users', 'Can manage user accounts'),
 ('manage_departments', 'Can manage departments and specializations'),
@@ -133,7 +117,7 @@ INSERT INTO permissions (name, description) VALUES
 ('upload_files', 'Can upload project files'),
 ('view_statistics', 'Can view system statistics');
 
--- Role permissions table
+-- Role Permissions Table Creation
 CREATE TABLE role_permissions (
     role ENUM('admin', 'supervisor', 'student'),
     permission_id INT,
@@ -141,7 +125,13 @@ CREATE TABLE role_permissions (
     FOREIGN KEY (permission_id) REFERENCES permissions(permission_id)
 );
 
+-- Role Permissions Table Seeding
 INSERT INTO role_permissions (role, permission_id) VALUES
-('admin', 1), ('admin', 2), ('admin', 3), ('admin', 7),
-('supervisor', 3), ('supervisor', 4), ('supervisor', 7),
-('student', 5), ('student', 6);
+('admin', 1),
+('admin', 2),
+('admin', 3),
+('admin', 4),
+('supervisor', 3),
+('supervisor', 4),
+('student', 5),
+('student', 6);

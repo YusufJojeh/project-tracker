@@ -33,20 +33,17 @@ function get_unread_notifications_count( PDO $pdo, int $userId ): int {
 // 3 ) Fetch recent notifications ( default 5 )
 // -----------------------------------------------------------------------------
 
-function get_recent_notifications( PDO $pdo, int $userId, int $limit = 5 ): array {
-    $stmt = $pdo->prepare( "
-        SELECT notification_id, title, message, is_read, created_at
-        FROM notifications
-        WHERE user_id = ?
-        ORDER BY created_at DESC
-        LIMIT ?
-    " );
-    $stmt->bindValue( 1, $userId, PDO::PARAM_INT );
-    $stmt->bindValue( 2, $limit, PDO::PARAM_INT );
-    $stmt->execute();
+function get_recent_notifications( $pdo, $user_id, $limit ) {
+    $stmt = $pdo->prepare( '
+    SELECT message, is_read, created_at
+    FROM notifications
+    WHERE user_id = ? AND is_read = FALSE
+    ORDER BY created_at DESC
+    LIMIT ?
+    ' );
+    $stmt->execute( [ $user_id, $limit ] );
     return $stmt->fetchAll( PDO::FETCH_ASSOC );
 }
-
 // -----------------------------------------------------------------------------
 // 4 ) Mark one or all notifications as read
 // -----------------------------------------------------------------------------

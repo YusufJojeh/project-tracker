@@ -11,9 +11,7 @@ if ( empty( $_SESSION[ 'user_id' ] ) || $_SESSION[ 'role' ] !== 'supervisor' ) {
 require_once __DIR__ . '/../config/database.php';
 
 // 2 ) Get the stage ID
-$stageId = isset( $_GET[ 'stage_id' ] )
-? ( int ) $_GET[ 'stage_id' ]
-: 0;
+$stageId = isset( $_GET[ 'stage_id' ] ) ? ( int ) $_GET[ 'stage_id' ] : 0;
 
 if ( $stageId < 1 ) {
     die( 'Invalid stage ID.' );
@@ -21,8 +19,8 @@ if ( $stageId < 1 ) {
 
 // 3 ) Handle form submission: insert or update the review
 if ( $_SERVER[ 'REQUEST_METHOD' ] === 'POST' ) {
-    $comment   = trim( $_POST[ 'comment' ] );
-    $grade     = ( float ) $_POST[ 'grade' ];
+    $feedback = trim( $_POST[ 'comment' ] );
+    $grade = ( float ) $_POST[ 'grade' ];
     $supervisorId = $_SESSION[ 'user_id' ];
 
     // Check for an existing review by this supervisor
@@ -36,24 +34,24 @@ if ( $_SERVER[ 'REQUEST_METHOD' ] === 'POST' ) {
     $existing = $check->fetchColumn();
 
     if ( $existing ) {
-        // Update
+        // Update the existing review
         $upd = $pdo->prepare( "
             UPDATE reviews
-               SET comment    = ?,
-                   grade      = ?,
-                   updated_at = CURRENT_TIMESTAMP
+               SET feedback    = ?,   // Using 'feedback' instead of 'comment'
+                   grade       = ?,
+                   reviewed_at = CURRENT_TIMESTAMP
              WHERE review_id = ?
         " );
-        $upd->execute( [ $comment, $grade, $existing ] );
+        $upd->execute( [ $feedback, $grade, $existing ] );
     } else {
-        // Insert
+        // Insert a new review
         $ins = $pdo->prepare( "
             INSERT INTO reviews
-                (stage_id, supervisor_id, comment, grade, created_at)
+                (stage_id, supervisor_id, feedback, grade, reviewed_at)
             VALUES
                 (?, ?, ?, ?, CURRENT_TIMESTAMP)
         " );
-        $ins->execute( [ $stageId, $supervisorId, $comment, $grade ] );
+        $ins->execute( [ $stageId, $supervisorId, $feedback, $grade ] );
     }
 
     header( 'Location: assigned_projects.php' );
@@ -64,29 +62,29 @@ if ( $_SERVER[ 'REQUEST_METHOD' ] === 'POST' ) {
 $stmt = $pdo->prepare( "
     SELECT
       s.stage_id,
-      s.title       AS stage_title,
+      s.title AS stage_title,
       s.description AS stage_description,
       s.due_date,
       p.project_id,
-      p.title       AS project_title,
-      u.user_id     AS student_id,
-      u.username    AS student_username,
-      u.email       AS student_email,
+      p.title AS project_title,
+      u.user_id AS student_id,
+      u.username AS student_username,
+      u.email AS student_email,
       r.review_id,
-      r.comment     AS existing_comment,
-      r.grade       AS existing_grade
-    FROM stages      s
-    JOIN projects    p ON s.project_id = p.project_id
-    JOIN users       u ON p.student_id = u.user_id
+      r.feedback AS existing_comment,  // Using 'feedback' instead of 'comment'
+      r.grade AS existing_grade
+    FROM stages s
+    JOIN projects p ON s.project_id = p.project_id
+    JOIN users u ON p.student_id = u.user_id
     LEFT JOIN reviews r
-      ON r.stage_id      = s.stage_id
+      ON r.stage_id = s.stage_id
      AND r.supervisor_id = ?
     WHERE s.stage_id = ?
 " );
 $stmt->execute( [ $_SESSION[ 'user_id' ], $stageId ] );
 $data = $stmt->fetch( PDO::FETCH_ASSOC );
 
-if ( ! $data ) {
+if ( !$data ) {
     die( '<div class="p-4"><h3>Stage not found or access denied.</h3>'
     . '<p><a href="assigned_projects.php">&larr; Back</a></p></div>' );
 }
@@ -178,8 +176,7 @@ $existingGrade   = $data[ 'existing_grade' ];
 
 <div class = 'card mb-4'>
 <div class = 'card-header bg-primary text-white'>
-<i class = 'fas fa-star'></i>
-Review "<?php echo htmlspecialchars($stageTitle, ENT_QUOTES, 'UTF-8'); ?>"
+<i class = 'fas fa-star'></i> Review "<?php echo htmlspecialchars($stageTitle, ENT_QUOTES, 'UTF-8'); ?>"
 </div>
 <div class = 'card-body'>
 <p>
@@ -211,15 +208,14 @@ Review "<?php echo htmlspecialchars($stageTitle, ENT_QUOTES, 'UTF-8'); ?>"
 <div class = 'form-group'>
 <label for = 'comment'>Comments</label>
 <textarea id = 'comment' name = 'comment' class = 'form-control' rows = '4'
-placeholder = 'Enter your feedback...'><?php
-echo htmlspecialchars( $existingComment ?: '', ENT_QUOTES, 'UTF-8' );
+placeholder = 'Enter your feedback...'><?php echo htmlspecialchars( $existingComment ?: '', ENT_QUOTES, 'UTF-8' );
 ?></textarea>
 </div>
 <div class = 'form-group'>
 <label for = 'grade'>Grade</label>
 <input type = 'number' step = '0.1' id = 'grade' name = 'grade' class = 'form-control' required value = "<?php echo $existingGrade !== null
-                       ? htmlspecialchars($existingGrade, ENT_QUOTES, 'UTF-8')
-                       : ''; ?>" placeholder = 'e.g. 8.5'>
+                                    ? htmlspecialchars($existingGrade, ENT_QUOTES, 'UTF-8')
+                                    : ''; ?>" placeholder = 'e.g. 8.5'>
 </div>
 <button type = 'submit' class = 'btn btn-success'>
 <i class = 'fas fa-save'></i> Submit Review
