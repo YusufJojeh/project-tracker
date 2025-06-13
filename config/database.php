@@ -1,7 +1,7 @@
 <?php
 // config/database.php
 $host = 'localhost';
-$dbname = 'project-tracker';
+$dbname = 'project_tracker';
 $username = 'root';
 $password = '';
 
