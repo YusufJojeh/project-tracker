@@ -13,8 +13,8 @@ if (empty($_SESSION['user_id']) || $_SESSION['role'] !== 'supervisor') {
 }
 $supervisorId = (int)$_SESSION['user_id'];
 
-// Fetch project ID
-$projectId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+// Get project ID (support both ?id= and ?project_id=)
+$projectId = isset($_GET['id']) ? (int)$_GET['id'] : (isset($_GET['project_id']) ? (int)$_GET['project_id'] : 0);
 if ($projectId < 1) {
     die('Invalid project ID.');
 }
@@ -40,7 +40,7 @@ if (!$project) {
     die('Project not found or access denied.');
 }
 
-// 2) Load stages, uploads & reviews for this supervisor
+// 2) Load all stages for this project
 $stagesStmt = $pdo->prepare("
     SELECT
       s.stage_id,
@@ -48,23 +48,33 @@ $stagesStmt = $pdo->prepare("
       s.description   AS stage_description,
       s.due_date,
       s.status        AS stage_status,
-      u.upload_id,
-      u.file_name     AS upload_name,
-      r.review_id,
-      r.grade         AS review_grade,
-      r.comment       AS review_comment
+      s.grade,
+      s.feedback,
+      s.updated_at
     FROM stages s
-    LEFT JOIN uploads u ON u.stage_id = s.stage_id
-    LEFT JOIN reviews r
-      ON r.stage_id      = s.stage_id
-     AND r.supervisor_id = ?
     WHERE s.project_id = ?
     ORDER BY s.due_date ASC
 ");
-$stagesStmt->execute([$supervisorId, $projectId]);
+$stagesStmt->execute([$projectId]);
 $stages = $stagesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// 3) Unread notification count
+// 3) For each stage, fetch attachments (uploads)
+$attachmentsMap = [];
+if ($stages) {
+    $stageIds = array_column($stages, 'stage_id');
+    $placeholders = implode(',', array_fill(0, count($stageIds), '?'));
+    $attStmt = $pdo->prepare("
+        SELECT *
+        FROM attachments
+        WHERE stage_id IN ($placeholders)
+        ORDER BY created_at ASC
+    ");
+    $attStmt->execute($stageIds);
+    foreach ($attStmt->fetchAll(PDO::FETCH_ASSOC) as $a) {
+        $attachmentsMap[$a['stage_id']][] = $a;
+    }
+}
+
 $unreadCount = get_unread_notifications_count($pdo, $supervisorId);
 ?>
 <!DOCTYPE html>
@@ -73,7 +83,7 @@ $unreadCount = get_unread_notifications_count($pdo, $supervisorId);
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Project Details &mdash; Supervisor</title>
+  <title>Project Details — Supervisor</title>
   <link rel="stylesheet" href="../plugins/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="../plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
@@ -83,78 +93,56 @@ $unreadCount = get_unread_notifications_count($pdo, $supervisorId);
   <div class="wrapper">
 
     <!-- Navbar -->
-    <nav class='main-header navbar navbar-expand navbar-white navbar-light'>
-      <!-- Sidebar toggle -->
-      <ul class='navbar-nav'>
-        <li class='nav-item'>
-          <a class='nav-link' data-widget='pushmenu' href='#'><i class='fas fa-bars'></i></a>
+    <nav class="main-header navbar navbar-expand navbar-white navbar-light">
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a class="nav-link" data-widget="pushmenu" href="#"><i class="fas fa-bars"></i></a>
         </li>
       </ul>
-      <!-- Right navbar -->
-      <ul class='navbar-nav ml-auto'>
-        <!-- Notifications -->
-        <li class='nav-item dropdown'>
-          <a class='nav-link' data-toggle='dropdown' href='#'>
-            <i class='far fa-bell'></i>
-            <?php if ( $unreadCount ): ?>
-            <span class='badge badge-warning navbar-badge'><?php echo $unreadCount;
-?></span>
-            <?php endif;
-?>
+      <ul class="navbar-nav ml-auto">
+        <li class="nav-item dropdown">
+          <a class="nav-link" data-toggle="dropdown" href="#">
+            <i class="far fa-bell"></i>
+            <?php if ($unreadCount): ?>
+            <span class="badge badge-warning navbar-badge"><?php echo $unreadCount; ?></span>
+            <?php endif; ?>
           </a>
-          <div class='dropdown-menu dropdown-menu-lg dropdown-menu-right'>
-            <span class='dropdown-item dropdown-header'><?php echo $unreadCount;
-?> New</span>
-            <div class='dropdown-divider'></div>
-            <a href='notifications.php' class='dropdown-item dropdown-footer'>See All Notifications</a>
+          <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
+            <span class="dropdown-item dropdown-header"><?php echo $unreadCount; ?> New</span>
+            <div class="dropdown-divider"></div>
+            <a href="notifications.php" class="dropdown-item dropdown-footer">See All Notifications</a>
           </div>
         </li>
-        <!-- Logout -->
-        <li class='nav-item'>
-          <a class='nav-link' href='../auth/logout.php'><i class='fas fa-sign-out-alt'></i></a>
+        <li class="nav-item">
+          <a class="nav-link" href="../auth/logout.php"><i class="fas fa-sign-out-alt"></i></a>
         </li>
       </ul>
     </nav>
-    <!-- /.navbar -->
 
     <!-- Sidebar -->
-    <aside class='main-sidebar sidebar-dark-primary elevation-4'>
-      <a href='dashboard.php' class='brand-link text-center'>
-        <span class='brand-text font-weight-light'>Project Tracker</span>
+    <aside class="main-sidebar sidebar-dark-primary elevation-4">
+      <a href="dashboard.php" class="brand-link text-center">
+        <span class="brand-text font-weight-light">Project Tracker</span>
       </a>
-      <div class='sidebar'>
-        <nav class='mt-2'>
-          <ul class='nav nav-pills nav-sidebar flex-column' data-widget='treeview'>
-            <li class='nav-item'>
-              <a href='dashboard.php' class='nav-link active'>
-                <i class='nav-icon fas fa-tachometer-alt'></i>
+      <div class="sidebar">
+        <nav class="mt-2">
+          <ul class="nav nav-pills nav-sidebar flex-column">
+            <li class="nav-item"><a href="dashboard.php" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i>
                 <p>Dashboard</p>
-              </a>
-            </li>
-            <li class='nav-item'>
-              <a href='projects.php' class='nav-link'>
-                <i class='nav-icon fas fa-project-diagram'></i>
+              </a></li>
+            <li class="nav-item"><a href="projects.php" class="nav-link"><i class="nav-icon fas fa-project-diagram"></i>
                 <p>Projects</p>
-              </a>
-            </li>
-            <li class='nav-item'>
-              <a href='notifications.php' class='nav-link'>
-                <i class='nav-icon far fa-bell'></i>
+              </a></li>
+            <li class="nav-item"><a href="notifications.php" class="nav-link"><i class="nav-icon far fa-bell"></i>
                 <p>Notifications</p>
-              </a>
-            </li>
-            <li class='nav-item'>
-              <a href='profile.php' class="nav-link <?php echo $current_page==='profile'?'active':'';?>">
-                <i class='nav-icon fas fa-user'></i>
+              </a></li>
+            <li class="nav-item"><a href="profile.php" class="nav-link"><i class="nav-icon fas fa-user"></i>
                 <p>Profile</p>
-              </a>
-            </li>
-            <li class='nav-item'>
-              <a href='../auth/logout.php' class='nav-link'>
-                <i class='nav-icon fas fa-sign-out-alt'></i>
+              </a></li>
+            <li class="nav-item"><a href="../auth/logout.php" class="nav-link"><i
+                  class="nav-icon fas fa-sign-out-alt"></i>
                 <p>Logout</p>
-              </a>
-            </li>
+              </a></li>
           </ul>
         </nav>
       </div>
@@ -162,18 +150,14 @@ $unreadCount = get_unread_notifications_count($pdo, $supervisorId);
 
     <!-- Content Wrapper -->
     <div class="content-wrapper">
-
-      <!-- Page header -->
       <section class="content-header">
         <div class="container-fluid d-flex justify-content-between align-items-center mb-2">
-          <h1 class="m-0">Project: <?php echo htmlspecialchars($project['title'], ENT_QUOTES) ?></h1>
+          <h1 class="m-0">Project: <?php echo htmlspecialchars($project['title']) ?></h1>
           <a href="projects.php" class="btn btn-secondary btn-sm">
             <i class="fas fa-arrow-left"></i> Back to Projects
           </a>
         </div>
       </section>
-
-      <!-- Main content -->
       <section class="content">
         <div class="container-fluid">
 
@@ -185,15 +169,15 @@ $unreadCount = get_unread_notifications_count($pdo, $supervisorId);
             <div class="card-body">
               <p><strong>Status:</strong>
                 <span class="badge badge-<?php echo $project['status']==='completed' ? 'success' : 'secondary'; ?>">
-                  <?php echo ucfirst(htmlspecialchars($project['status'], ENT_QUOTES)); ?>
+                  <?php echo ucfirst(htmlspecialchars($project['status'])); ?>
                 </span>
               </p>
               <p><strong>Description:</strong><br>
-                <?php echo nl2br(htmlspecialchars($project['description'], ENT_QUOTES)) ?>
+                <?php echo nl2br(htmlspecialchars($project['description'])) ?>
               </p>
               <p><strong>Student:</strong>
-                <?php echo htmlspecialchars($project['student_name'], ENT_QUOTES) ?>
-                (<?php echo htmlspecialchars($project['student_email'], ENT_QUOTES) ?>)
+                <?php echo htmlspecialchars($project['student_name']) ?>
+                (<?php echo htmlspecialchars($project['student_email']) ?>)
               </p>
               <p>
                 <strong>Created:</strong>
@@ -220,54 +204,51 @@ $unreadCount = get_unread_notifications_count($pdo, $supervisorId);
                       <th>Stage</th>
                       <th>Due Date</th>
                       <th>Status</th>
-                      <th>Uploaded</th>
-                      <th>Reviewed</th>
+                      <th>Uploads</th>
+                      <th>Grade</th>
+                      <th>Feedback</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     <?php foreach ($stages as $s): ?>
                     <tr>
-                      <td><?php echo htmlspecialchars($s['stage_title'], ENT_QUOTES) ?></td>
-                      <td><?php echo date('Y-m-d', strtotime($s['due_date'])) ?></td>
+                      <td><?php echo htmlspecialchars($s['stage_title']); ?></td>
+                      <td><?php echo date('Y-m-d', strtotime($s['due_date'])); ?></td>
                       <td>
                         <span class="badge badge-<?php
                           echo $s['stage_status']==='approved' ? 'success'
-                             : ($s['stage_status']==='rejected' ? 'danger' : 'warning');
+                               : ($s['stage_status']==='rejected' ? 'danger'
+                               : ($s['stage_status']==='submitted' ? 'primary'
+                               : ($s['stage_status']==='reviewed' ? 'info'
+                               : 'warning')));
                         ?>">
-                          <?php echo ucfirst(htmlspecialchars($s['stage_status'], ENT_QUOTES)) ?>
+                          <?php echo ucfirst(htmlspecialchars($s['stage_status'])); ?>
                         </span>
                       </td>
                       <td>
-                        <?php if ($s['upload_id']): ?>
-                        <a href="../uploads/<?php echo rawurlencode($s['upload_name']) ?>" target="_blank"
-                          class="btn btn-sm btn-info">
+                        <?php if (!empty($attachmentsMap[$s['stage_id']])): ?>
+                        <?php foreach ($attachmentsMap[$s['stage_id']] as $att): ?>
+                        <a href="../uploads/<?php echo rawurlencode($att['file_path']); ?>" target="_blank"
+                          class="btn btn-sm btn-info mb-1" title="<?php echo htmlspecialchars($att['file_name']); ?>">
                           <i class="fas fa-file"></i>
                         </a>
+                        <?php endforeach; ?>
                         <?php else: ?>
                         <span class="text-muted">—</span>
                         <?php endif; ?>
                       </td>
                       <td>
-                        <?php if ($s['review_id']): ?>
-                        <span class="text-success">Yes
-                          (<?php echo htmlspecialchars($s['review_grade'], ENT_QUOTES) ?>)</span>
-                        <?php else: ?>
-                        <span class="text-warning">No</span>
-                        <?php endif; ?>
+                        <?php echo ($s['grade'] !== null) ? htmlspecialchars($s['grade']) : '<span class="text-muted">—</span>'; ?>
                       </td>
                       <td>
-                        <?php if ($s['review_id']): ?>
-                        <a href="stage_review.php?id=<?php echo $s['stage_id'] ?>" class="btn btn-sm btn-primary"
-                          title="View Review">
-                          <i class="fas fa-eye"></i>
-                        </a>
-                        <?php else: ?>
-                        <a href="stage_review.php?id=<?php echo $s['stage_id'] ?>" class="btn btn-sm btn-warning"
+                        <?php echo ($s['feedback']) ? htmlspecialchars($s['feedback']) : '<span class="text-muted">—</span>'; ?>
+                      </td>
+                      <td>
+                        <a href="stage_review.php?id=<?php echo $s['stage_id']; ?>" class="btn btn-sm btn-primary"
                           title="Review Stage">
-                          <i class="fas fa-star"></i>
+                          <i class="fas fa-star"></i> Review
                         </a>
-                        <?php endif; ?>
                       </td>
                     </tr>
                     <?php endforeach; ?>
@@ -281,15 +262,11 @@ $unreadCount = get_unread_notifications_count($pdo, $supervisorId);
         </div>
       </section>
     </div>
-    <!-- /.content-wrapper -->
 
-    <!-- Footer -->
     <?php include __DIR__ . '/../includes/footer.php'; ?>
 
   </div>
-  <!-- ./wrapper -->
 
-  <!-- AdminLTE scripts -->
   <script src="../plugins/jquery/jquery.min.js"></script>
   <script src="../plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="../plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>

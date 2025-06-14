@@ -24,7 +24,7 @@ try {
 }
 
 // Function to get database connection
-function get_db_connection() {
-    global $pdo;
-    return $pdo;
-}
+// function get_db_connection() {
+//     global $pdo;
+//     return $pdo;
+// }

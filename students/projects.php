@@ -25,7 +25,6 @@ $projects = $stmt->fetchAll( PDO::FETCH_ASSOC );
 
 // Notifications count for sidebar badge
 $unreadCount = get_unread_notifications_count( $pdo, $_SESSION[ 'user_id' ] );
-
 ?>
 <!DOCTYPE html>
 <html lang='en'>
@@ -50,13 +49,11 @@ $unreadCount = get_unread_notifications_count( $pdo, $_SESSION[ 'user_id' ] );
 
     <!-- Navbar -->
     <nav class='main-header navbar navbar-expand navbar-white navbar-light'>
-      <!-- Sidebar toggle-->
       <ul class='navbar-nav'>
         <li class='nav-item'>
           <a class='nav-link' data-widget='pushmenu' href='#'><i class='fas fa-bars'></i></a>
         </li>
       </ul>
-      <!-- Right navbar: notifications -->
       <ul class='navbar-nav ml-auto'>
         <li class='nav-item dropdown'>
           <a class='nav-link' data-toggle='dropdown' href='#'>
@@ -78,17 +75,13 @@ $unreadCount = get_unread_notifications_count( $pdo, $_SESSION[ 'user_id' ] );
     </nav>
     <!-- /.navbar -->
 
-    <!-- Main Sidebar -->
+    <!-- Sidebar -->
     <aside class='main-sidebar sidebar-dark-primary elevation-4'>
-      <!-- Brand -->
       <a href='#' class='brand-link'>
         <img src='../dist/img/AdminLTELogo.png' alt='Logo' class='brand-image img-circle elevation-3'>
         <span class='brand-text font-weight-light'>Project Tracker</span>
       </a>
-
-      <!-- Sidebar -->
       <div class='sidebar'>
-        <!-- User panel -->
         <div class='user-panel mt-3 pb-3 mb-3 d-flex'>
           <div class='image'>
             <img src='../dist/img/user2-160x160.jpg' class='img-circle elevation-2' alt='User'>
@@ -98,8 +91,6 @@ $unreadCount = get_unread_notifications_count( $pdo, $_SESSION[ 'user_id' ] );
 ?></a>
           </div>
         </div>
-
-        <!-- Sidebar menu -->
         <nav class='mt-2'>
           <ul class='nav nav-pills nav-sidebar flex-column' data-widget='treeview'>
             <li class='nav-item'>
@@ -126,12 +117,7 @@ $unreadCount = get_unread_notifications_count( $pdo, $_SESSION[ 'user_id' ] );
                 <p>Upload Stage</p>
               </a>
             </li>
-            <li class='nav-item'>
-              <a href='notifications.php' class='nav-link'>
-                <i class='nav-icon far fa-bell'></i>
-                <p>Notifications</p>
-              </a>
-            </li>
+
             <li class='nav-item'>
               <a href='profile.php' class='nav-link'>
                 <i class='nav-icon fas fa-user'></i>
@@ -146,24 +132,20 @@ $unreadCount = get_unread_notifications_count( $pdo, $_SESSION[ 'user_id' ] );
             </li>
           </ul>
         </nav>
-        <!-- /.sidebar-menu -->
       </div>
-      <!-- /.sidebar -->
     </aside>
+    <!-- /.sidebar -->
 
     <!-- Content Wrapper -->
     <div class='content-wrapper'>
-      <!-- Page header -->
       <section class='content-header'>
         <div class='container-fluid'>
           <h1>My Projects</h1>
         </div>
       </section>
 
-      <!-- Main content -->
       <section class='content'>
         <div class='container-fluid'>
-          <!-- Projects table -->
           <div class='card'>
             <div class='card-header'>
               <h3 class='card-title'>Projects List</h3>
@@ -195,24 +177,25 @@ $badge = match( $proj[ 'status' ] ) {
 ?></td>
                     <td><?php echo h( $proj[ 'supervisor_name' ] );
 ?></td>
-                    <td><span class="badge badge-<?php echo $badge; ?>"><?php echo ucfirst( $proj[ 'status' ] );
-?></span>
+                    <td>
+                      <span class="badge badge-<?php echo $badge; ?>">
+                        <?php echo ucfirst( $proj[ 'status' ] );
+?>
+                      </span>
                     </td>
                     <td><?php echo date( 'Y-m-d', strtotime( $proj[ 'created_at' ] ) );
 ?></td>
                     <td><?php echo date( 'Y-m-d', strtotime( $proj[ 'updated_at' ] ) );
 ?></td>
                     <td>
-                      <a href="project_view.php?id=<?php echo $proj['project_id']; ?>" class='btn btn-info btn-sm'>
-                        <i class='fas fa-eye'></i>
-                      </a>
-                      <a href="project_edit.php?id=<?php echo $proj['project_id']; ?>" class='btn btn-warning btn-sm'>
-                        <i class='fas fa-edit'></i>
-                      </a>
+                      <a href="project_view.php?id=<?php echo $proj['project_id']; ?>" class='btn btn-info btn-sm'
+                        title='View'><i class='fas fa-eye'></i></a>
+                      <a href="project_edit.php?id=<?php echo $proj['project_id']; ?>" class='btn btn-warning btn-sm'
+                        title='Edit'><i class='fas fa-edit'></i></a>
                       <a href="stage_upload.php?project_id=<?php echo $proj['project_id']; ?>"
-                        class='btn btn-success btn-sm'>
-                        <i class='fas fa-upload'></i>
-                      </a>
+                        class='btn btn-success btn-sm' title='Upload Stage'><i class='fas fa-upload'></i></a>
+                      <a href="stage_manage.php?id=<?php echo $proj['project_id']; ?>" class='btn btn-secondary btn-sm'
+                        title='Manage Stages'><i class='fas fa-tasks'></i></a>
                     </td>
                   </tr>
                   <?php endforeach;
@@ -226,14 +209,12 @@ $badge = match( $proj[ 'status' ] ) {
                 </tbody>
               </table>
             </div>
-
           </div>
         </div>
       </section>
     </div>
     <!-- /.content-wrapper -->
 
-    <!-- Footer -->
     <footer class='main-footer'>
       <div class='float-right d-none d-sm-inline'>Version 1.0</div>
       <strong>&copy;
@@ -243,7 +224,6 @@ $badge = match( $proj[ 'status' ] ) {
   </div>
   <!-- ./wrapper -->
 
-  <!-- Scripts -->
   <script src='../plugins/jquery/jquery.min.js'></script>
   <script src='../plugins/bootstrap/js/bootstrap.bundle.min.js'></script>
   <script src='../plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js'></script>

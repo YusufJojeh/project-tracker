@@ -116,22 +116,22 @@ function get_status_badge_class($status) {
 /**
  * Get the Bootstrap badge class for a stage status
  */
-function get_stage_status_class($status) {
-    switch ($status) {
-        case 'pending':
-            return 'secondary';
-        case 'submitted':
-            return 'info';
-        case 'reviewed':
-            return 'primary';
-        case 'approved':
-            return 'success';
-        case 'rejected':
-            return 'danger';
-        default:
-            return 'secondary';
-    }
-}
+// function get_stage_status_class($status) {
+//     switch ($status) {
+//         case 'pending':
+//             return 'secondary';
+//         case 'submitted':
+//             return 'info';
+//         case 'reviewed':
+//             return 'primary';
+//         case 'approved':
+//             return 'success';
+//         case 'rejected':
+//             return 'danger';
+//         default:
+//             return 'secondary';
+//     }
+// }
 
 /**
  * Get project progress percentage
@@ -223,26 +223,26 @@ function get_specialization_name($pdo, $specialization_id) {
 /**
  * Get user's role
  */
-function get_user_role($pdo, $user_id) {
-    $stmt = $pdo->prepare('SELECT role FROM users WHERE user_id = ?');
-    $stmt->execute([$user_id]);
-    return $stmt->fetchColumn();
-}
+// function get_user_role($pdo, $user_id) {
+//     $stmt = $pdo->prepare('SELECT role FROM users WHERE user_id = ?');
+//     $stmt->execute([$user_id]);
+//     return $stmt->fetchColumn();
+// }
 
 /**
  * Check if user has permission
  */
-function has_permission($pdo, $user_id, $permission_name) {
-    $stmt = $pdo->prepare('
-        SELECT COUNT(*)
-        FROM role_permissions rp
-        JOIN permissions p ON rp.permission_id = p.permission_id
-        JOIN users u ON u.role = rp.role
-        WHERE u.user_id = ? AND p.name = ?
-    ');
-    $stmt->execute([$user_id, $permission_name]);
-    return $stmt->fetchColumn() > 0;
-}
+// function has_permission($pdo, $user_id, $permission_name) {
+//     $stmt = $pdo->prepare('
+//         SELECT COUNT(*)
+//         FROM role_permissions rp
+//         JOIN permissions p ON rp.permission_id = p.permission_id
+//         JOIN users u ON u.role = rp.role
+//         WHERE u.user_id = ? AND p.name = ?
+//     ');
+//     $stmt->execute([$user_id, $permission_name]);
+//     return $stmt->fetchColumn() > 0;
+// }
 
 /**
  * HTML escape function
